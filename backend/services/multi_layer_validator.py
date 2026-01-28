@@ -5,7 +5,9 @@ Combines all 3 validation layers for maximum accuracy.
 
 from typing import Dict, List, Optional
 import logging
-from .tech_ecosystem_validator import TechEcosystemValidator
+import os
+from .adaptive_tech_validator import AdaptiveTechValidator
+from .tech_ecosystem_validator import TechEcosystemValidator  # Keep as fallback
 from .llm_context_validator import LLMContextValidator
 from .semantic_validator import SemanticValidator
 
@@ -14,21 +16,35 @@ logger = logging.getLogger(__name__)
 class MultiLayerValidator:
     """
     Unified validator that combines 3 layers:
-    - Layer 1: Tech Ecosystem Graph (fast, rule-based)
-    - Layer 2: LLM Validation (smart, context-aware)
+    - Layer 1: AI-Powered Tech Validator (100% adaptive, zero hardcoded)
+    - Layer 2: LLM Context Validation (smart, context-aware)
     - Layer 3: Semantic Similarity (precise, numerical)
     
-    Each layer can reject or approve. If any layer rejects with HIGH confidence, keyword is blocked.
+    NEW: Layer 1 is now 100% AI-powered - no hardcoded tech dictionaries!
+    Works with ANY technology (even ones invented in 2030).
     """
     
-    def __init__(self, llm_client=None):
+    def __init__(self, llm_client=None, use_adaptive=True):
         """
         Args:
-            llm_client: Optional Groq/Ollama client for Layer 2 (LLM validation)
+            llm_client: Optional Groq/Ollama client for AI validation
+            use_adaptive: If True, uses AI-powered validator (recommended). 
+                         If False, falls back to hardcoded dictionaries.
         """
-        # Initialize all 3 layers
-        self.layer1 = TechEcosystemValidator()
+        # Layer 1: Choose adaptive (AI) or hardcoded (fallback)
+        use_adaptive_layer1 = use_adaptive and os.getenv('ADAPTIVE_VALIDATION', 'true').lower() == 'true'
+        
+        if use_adaptive_layer1 and llm_client:
+            self.layer1 = AdaptiveTechValidator(llm_client)
+            logger.info("🧠 Using ADAPTIVE Layer 1 (100% AI, zero hardcoded rules)")
+        else:
+            self.layer1 = TechEcosystemValidator()
+            logger.info("📚 Using HARDCODED Layer 1 (fallback mode)")
+        
+        # Layer 2: LLM Context Validator
         self.layer2 = LLMContextValidator(llm_client) if llm_client else None
+        
+        # Layer 3: Semantic Similarity
         self.layer3 = SemanticValidator()
         
         # Track statistics
