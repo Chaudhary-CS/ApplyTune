@@ -84,13 +84,19 @@ export default function DiffViewer({ changePreview, onToggleChange }: DiffViewer
     }
   }
   
+  // Escape special regex characters
+  const escapeRegex = (str: string) => {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  }
+  
   // Highlight keywords in text
   const highlightKeywords = (text: string, keywords: string[]) => {
     if (!keywords.length) return text
     
     let highlighted = text
     keywords.forEach(keyword => {
-      const regex = new RegExp(`(${keyword})`, 'gi')
+      const escapedKeyword = escapeRegex(keyword)
+      const regex = new RegExp(`(${escapedKeyword})`, 'gi')
       highlighted = highlighted.replace(regex, '<mark class="bg-yellow-200 px-1 rounded">$1</mark>')
     })
     
