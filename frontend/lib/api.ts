@@ -19,6 +19,25 @@ export interface JobData {
   description: string
 }
 
+export interface GenuinityAnalysis {
+  score: number
+  risk_level: 'LOW' | 'MEDIUM' | 'HIGH'
+  issues: Array<{
+    type: string
+    severity: string
+    description: string
+    impact: number
+  }>
+  warnings: Array<{
+    type: string
+    severity: string
+    description: string
+    impact: number
+  }>
+  strengths: string[]
+  recommendations: string[]
+}
+
 export interface OptimizationResult {
   original_score: number
   optimized_score: number
@@ -32,6 +51,7 @@ export interface OptimizationResult {
   score_breakdown: Record<string, any>
   improvement_percentage: number
   optimized_resume: any
+  genuinity?: GenuinityAnalysis // New field
 }
 
 /**
@@ -59,7 +79,7 @@ export async function analyzeJob(jobData: JobData) {
 }
 
 /**
- * The big one - optimize resume for job
+ * The big one - optimize resume for job with genuinity analysis
  * Supports both file upload and LaTeX text paste
  */
 export async function optimizeResume(
@@ -73,30 +93,60 @@ export async function optimizeResume(
   if (file) {
     formData.append('file', file)
   } else if (latexCode) {
-    // Create a virtual .tex file from the LaTeX code
-    const latexBlob = new Blob([latexCode], { type: 'application/x-tex' })
-    const latexFile = new File([latexBlob], 'resume.tex', { type: 'application/x-tex' })
-    formData.append('file', latexFile)
+    formData.append('latex_code', latexCode)
   } else {
     throw new Error('Either file or LaTeX code must be provided')
   }
   
-  formData.append('job_title', jobData.job_title)
-  formData.append('company_name', jobData.company_name)
+  formData.append('job_title', jobData.job_title || '')
   formData.append('job_description', jobData.description)
 
   try {
-    const response = await api.post('/optimize-resume', formData, {
+    const response = await api.post('/api/optimize', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
     })
 
-    return response.data
+    // Transform response to match OptimizationResult interface
+    const data = response.data
+    
+    // Validation: ensure data is an object
+    if (!data || typeof data !== 'object') {
+      console.error('Invalid response data:', data)
+      throw new Error('Invalid response from server')
+    }
+    
+    // Validation: ensure required fields exist
+    if (!data.scores || !data.keywords || !data.optimized_resume) {
+      console.error('Missing required fields in response:', data)
+      throw new Error('Incomplete response from server')
+    }
+    
+    return {
+      original_score: data.scores?.original?.overall_score || 0,
+      optimized_score: data.scores?.optimized?.overall_score || 0,
+      ats_scores: {
+        original: data.scores?.original?.ats_specific || {},
+        optimized: data.scores?.optimized?.ats_specific || {}
+      },
+      matched_keywords: data.keywords?.matched_optimized || [],
+      missing_keywords: data.keywords?.missing_optimized || [],
+      suggestions: data.genuinity?.recommendations || [],
+      score_breakdown: data.scores?.optimized?.breakdown || {},
+      improvement_percentage: data.scores?.improvement || 0,
+      optimized_resume: {
+        latex_content: data.optimized_resume?.content || null,
+        ...data.optimized_resume
+      },
+      genuinity: data.genuinity // NEW: Genuinity analysis
+    }
   } catch (error: any) {
     // Better error handling
+    console.error('Optimization error:', error)
     if (error.response) {
-      throw new Error(error.response.data.detail || 'Optimization failed')
+      const detail = error.response.data?.detail || error.response.data || 'Optimization failed'
+      throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail))
     } else if (error.request) {
       throw new Error('No response from server. Is the backend running?')
     } else {

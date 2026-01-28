@@ -1,233 +1,201 @@
 """
-Smart Keyword Prioritizer - Add keywords by IMPORTANCE, not alphabetically!
-
-Based on research into Jobscan, Teal, and Resume Worded algorithms.
+Keyword Prioritizer Service
+Scores and ranks keywords based on importance in job description.
+Helps determine which keywords to prioritize for ATS optimization.
 """
 
-import re
 from typing import List, Dict, Tuple
-from collections import Counter
+import re
 
 
 class KeywordPrioritizer:
     """
-    Prioritize keywords by actual importance using industry-standard methods.
-    
-    Formula: Priority = Frequency × Section Weight × Context Score
-    
-    This ensures we add "Python" (mentioned 8x in Requirements) before
-    "Java" (mentioned 1x in Nice-to-have).
+    Analyzes job description to prioritize keywords based on:
+    - Frequency of appearance
+    - Section importance (required vs nice-to-have)
+    - Context (technical skills vs soft skills)
+    - Position in job description (earlier = more important)
     """
     
-    # Section weights based on Jobscan's research
-    SECTION_WEIGHTS = {
-        'requirements': 3.0,        # CRITICAL - must have
-        'required': 3.0,
-        'must have': 3.0,
-        'qualifications': 2.5,
-        'responsibilities': 2.0,    # IMPORTANT - what you'll do
-        'preferred': 1.5,
-        'nice to have': 1.0,        # OPTIONAL - bonus
-        'plus': 1.0,
-        'bonus': 0.8,
-        'default': 1.0              # Mentioned but no specific section
-    }
+    def __init__(self):
+        # Weight multipliers for different sections
+        self.section_weights = {
+            'required': 3.0,
+            'must_have': 3.0,
+            'qualifications': 2.5,
+            'technical_skills': 2.0,
+            'responsibilities': 1.8,
+            'preferred': 1.2,
+            'nice_to_have': 0.8,
+            'bonus': 0.6
+        }
+        
+        # Context bonus multipliers
+        self.context_bonuses = {
+            'job_title': 2.0,
+            'first_paragraph': 1.5,
+            'repeated_multiple_times': 1.3
+        }
     
     def prioritize_keywords(
         self, 
-        missing_keywords: List[str], 
-        job_description: str
-    ) -> List[Tuple[str, float]]:
+        keywords: List[str], 
+        job_description: str,
+        job_title: str = ""
+    ) -> List[Dict[str, any]]:
         """
-        Sort keywords by importance for THIS specific job.
+        Score and rank keywords by importance.
         
         Args:
-            missing_keywords: Keywords not in resume
-            job_description: Full job posting text
+            keywords: List of keywords to prioritize
+            job_description: Full job description text
+            job_title: Job title for additional context
             
         Returns:
-            List of (keyword, priority_score) sorted by priority (highest first)
+            List of dicts with keyword, score, and reasoning
         """
+        job_desc_lower = job_description.lower()
+        job_title_lower = job_title.lower()
+        
         scored_keywords = []
         
-        for keyword in missing_keywords:
-            score = self._calculate_priority_score(keyword, job_description)
-            scored_keywords.append((keyword, score))
+        for keyword in keywords:
+            keyword_lower = keyword.lower()
+            
+            # Base score from frequency
+            frequency = len(re.findall(r'\b' + re.escape(keyword_lower) + r'\b', job_desc_lower))
+            score = frequency * 1.0
+            
+            reasons = []
+            
+            # Frequency bonus
+            if frequency >= 3:
+                score *= 1.3
+                reasons.append(f"Mentioned {frequency}x")
+            elif frequency >= 2:
+                score *= 1.15
+                reasons.append(f"Mentioned {frequency}x")
+            
+            # Job title match (highest priority)
+            if keyword_lower in job_title_lower:
+                score *= self.context_bonuses['job_title']
+                reasons.append("In job title")
+            
+            # Section detection
+            section_found = self._detect_section(keyword_lower, job_description)
+            if section_found:
+                weight = self.section_weights.get(section_found, 1.0)
+                score *= weight
+                reasons.append(f"In {section_found} section")
+            
+            # First paragraph bonus (usually most important)
+            first_para = job_description[:500].lower()
+            if keyword_lower in first_para:
+                score *= self.context_bonuses['first_paragraph']
+                reasons.append("Early mention")
+            
+            # Technical specificity bonus
+            if self._is_technical_keyword(keyword):
+                score *= 1.2
+                reasons.append("Technical term")
+            
+            scored_keywords.append({
+                'keyword': keyword,
+                'score': round(score, 2),
+                'frequency': frequency,
+                'priority': 'HIGH' if score >= 5.0 else 'MEDIUM' if score >= 2.0 else 'LOW',
+                'reasons': reasons
+            })
         
-        # Sort by score (highest first)
-        scored_keywords.sort(key=lambda x: x[1], reverse=True)
-        
-        print(f"\n📊 Keyword Prioritization Results:")
-        print(f"   Top 5 keywords to add:")
-        for kw, score in scored_keywords[:5]:
-            print(f"      {score:6.1f} pts - {kw}")
+        # Sort by score descending
+        scored_keywords.sort(key=lambda x: x['score'], reverse=True)
         
         return scored_keywords
     
-    def _calculate_priority_score(self, keyword: str, job_description: str) -> float:
-        """
-        Calculate priority score for a single keyword.
+    def _detect_section(self, keyword: str, job_description: str) -> str:
+        """Detect which section of the job description contains the keyword."""
+        job_desc_lower = job_description.lower()
         
-        Score = Frequency × Section Weight × Context Bonus
-        """
-        # 1. Count frequency (case-insensitive)
-        frequency = self._count_frequency(keyword, job_description)
+        # Find keyword position
+        keyword_pos = job_desc_lower.find(keyword)
+        if keyword_pos == -1:
+            return None
         
-        # 2. Determine section weight (where it appears)
-        section_weight = self._get_section_weight(keyword, job_description)
+        # Look backwards from keyword position for section headers
+        text_before = job_desc_lower[:keyword_pos]
         
-        # 3. Context bonus (appears in title, first paragraph, etc.)
-        context_bonus = self._get_context_bonus(keyword, job_description)
+        # Check for section markers
+        section_markers = {
+            'required': ['required', 'must have', 'requirements', 'qualifications'],
+            'technical_skills': ['technical skills', 'tech stack', 'technologies'],
+            'responsibilities': ['responsibilities', 'what you\'ll do', 'your role'],
+            'preferred': ['preferred', 'nice to have', 'bonus', 'plus'],
+        }
         
-        # Calculate final score
-        base_score = frequency * section_weight
-        final_score = base_score * (1.0 + context_bonus)
+        # Find the closest section header before the keyword
+        closest_section = None
+        closest_distance = float('inf')
         
-        return final_score
+        for section_name, markers in section_markers.items():
+            for marker in markers:
+                marker_pos = text_before.rfind(marker)
+                if marker_pos != -1:
+                    distance = keyword_pos - marker_pos
+                    if distance < closest_distance:
+                        closest_distance = distance
+                        closest_section = section_name
+        
+        return closest_section
     
-    def _count_frequency(self, keyword: str, text: str) -> int:
-        """
-        Count how many times keyword appears (case-insensitive).
-        
-        Example:
-        - "Python" appears 8 times → frequency = 8
-        - "Java" appears 2 times → frequency = 2
-        """
-        # Use word boundaries to avoid partial matches
-        pattern = r'\b' + re.escape(keyword) + r'\b'
-        matches = re.findall(pattern, text, re.IGNORECASE)
-        return len(matches)
-    
-    def _get_section_weight(self, keyword: str, job_description: str) -> float:
-        """
-        Determine which section the keyword appears in.
-        
-        "Requirements" = 3.0x weight
-        "Responsibilities" = 2.0x weight  
-        "Nice to have" = 1.0x weight
-        """
-        # Split job description into sections
-        sections = self._identify_sections(job_description)
-        
-        # Find which section contains this keyword
-        keyword_lower = keyword.lower()
-        
-        for section_name, section_text in sections.items():
-            if keyword_lower in section_text.lower():
-                # Return weight for this section
-                for weight_key, weight_value in self.SECTION_WEIGHTS.items():
-                    if weight_key in section_name.lower():
-                        return weight_value
-                
-                # Default weight if section name doesn't match known categories
-                return self.SECTION_WEIGHTS['default']
-        
-        # If not in any specific section, default weight
-        return self.SECTION_WEIGHTS['default']
-    
-    def _identify_sections(self, job_description: str) -> Dict[str, str]:
-        """
-        Split job description into sections.
-        
-        Common sections:
-        - "Requirements" / "Qualifications"
-        - "Responsibilities" / "What You'll Do"
-        - "Preferred" / "Nice to have" / "Bonus"
-        """
-        sections = {}
-        
-        # Common section headers (case-insensitive)
-        section_patterns = [
-            r'(?:^|\n)[\s]*(?:###?|##?)?\s*(requirements?|qualifications?|must have)',
-            r'(?:^|\n)[\s]*(?:###?|##?)?\s*(responsibilities|what you\'?ll do|duties)',
-            r'(?:^|\n)[\s]*(?:###?|##?)?\s*(preferred|nice to have|bonus|plus)',
-            r'(?:^|\n)[\s]*(?:###?|##?)?\s*(required skills?|technical requirements?)',
-            r'(?:^|\n)[\s]*(?:###?|##?)?\s*(what you\'?ll bring|what we\'?re looking for)',
+    def _is_technical_keyword(self, keyword: str) -> bool:
+        """Determine if keyword is a technical term (programming language, tool, etc.)."""
+        # Common technical indicators
+        technical_patterns = [
+            r'\b[A-Z]{2,}\b',  # Acronyms (API, SQL, AWS)
+            r'^[a-z]+\.[a-z]+$',  # Dotted notation (Node.js, React.js)
+            r'^\d+\.\d+',  # Version numbers (Python 3.x)
         ]
         
-        # Try to split by section headers
-        last_end = 0
-        current_section = "Introduction"
+        for pattern in technical_patterns:
+            if re.search(pattern, keyword):
+                return True
         
-        for pattern in section_patterns:
-            matches = list(re.finditer(pattern, job_description, re.IGNORECASE | re.MULTILINE))
-            for match in matches:
-                # Save previous section
-                section_text = job_description[last_end:match.start()]
-                if section_text.strip():
-                    sections[current_section] = section_text
-                
-                # Start new section
-                current_section = match.group(1)
-                last_end = match.end()
+        # Common technical keywords
+        technical_terms = [
+            'python', 'javascript', 'java', 'c++', 'golang', 'rust',
+            'react', 'angular', 'vue', 'node', 'django', 'flask',
+            'docker', 'kubernetes', 'aws', 'azure', 'gcp',
+            'postgresql', 'mongodb', 'redis', 'sql',
+            'pytorch', 'tensorflow', 'machine learning', 'ml',
+            'api', 'rest', 'graphql', 'microservices',
+            'git', 'ci/cd', 'devops', 'agile'
+        ]
         
-        # Add final section
-        if last_end < len(job_description):
-            sections[current_section] = job_description[last_end:]
-        
-        # If no sections found, treat entire JD as "Requirements"
-        if not sections:
-            sections["Requirements"] = job_description
-        
-        return sections
-    
-    def _get_context_bonus(self, keyword: str, job_description: str) -> float:
-        """
-        Bonus points for appearing in critical locations.
-        
-        - Job title: +0.5 bonus (50% boost)
-        - First paragraph: +0.3 bonus (30% boost)
-        - Capitalized/emphasized: +0.2 bonus (20% boost)
-        """
-        bonus = 0.0
-        
-        # Extract first 200 characters (intro/title area)
-        intro = job_description[:200]
-        
-        # Bonus 1: Appears in intro/title area
-        if keyword.lower() in intro.lower():
-            bonus += 0.3
-        
-        # Bonus 2: Appears capitalized (likely emphasized)
-        if re.search(r'\b' + re.escape(keyword.upper()) + r'\b', job_description):
-            bonus += 0.2
-        
-        # Bonus 3: Appears in bold/emphasized text (Markdown or emphasis indicators)
-        if re.search(r'[\*_]{1,2}' + re.escape(keyword) + r'[\*_]{1,2}', job_description, re.IGNORECASE):
-            bonus += 0.2
-        
-        return min(bonus, 1.0)  # Cap at 100% bonus
+        return keyword.lower() in technical_terms
     
     def get_top_keywords(
         self, 
-        missing_keywords: List[str], 
-        job_description: str, 
-        top_n: int = 15
+        scored_keywords: List[Dict], 
+        limit: int = 10,
+        min_priority: str = 'LOW'
     ) -> List[str]:
         """
-        Get top N keywords to add, sorted by priority.
+        Get top N keywords filtered by priority.
         
-        This is what the optimizer should use!
+        Args:
+            scored_keywords: Output from prioritize_keywords()
+            limit: Maximum number of keywords to return
+            min_priority: Minimum priority level (LOW, MEDIUM, HIGH)
+            
+        Returns:
+            List of top keyword strings
         """
-        scored = self.prioritize_keywords(missing_keywords, job_description)
-        return [kw for kw, score in scored[:top_n]]
-    
-    def explain_priority(self, keyword: str, job_description: str) -> Dict:
-        """
-        Explain WHY a keyword has its priority score.
-        Useful for showing to users.
-        """
-        frequency = self._count_frequency(keyword, job_description)
-        section_weight = self._get_section_weight(keyword, job_description)
-        context_bonus = self._get_context_bonus(keyword, job_description)
+        priority_order = {'LOW': 0, 'MEDIUM': 1, 'HIGH': 2}
+        min_level = priority_order.get(min_priority, 0)
         
-        score = frequency * section_weight * (1.0 + context_bonus)
+        filtered = [
+            kw for kw in scored_keywords 
+            if priority_order.get(kw['priority'], 0) >= min_level
+        ]
         
-        return {
-            'keyword': keyword,
-            'score': score,
-            'frequency': frequency,
-            'section_weight': section_weight,
-            'context_bonus': context_bonus,
-            'explanation': f"Mentioned {frequency}x, appears in important section (weight: {section_weight}x), context bonus: +{context_bonus*100:.0f}%"
-        }
+        return [kw['keyword'] for kw in filtered[:limit]]

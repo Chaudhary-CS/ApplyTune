@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { 
   TrendingUp, Download, RotateCcw, CheckCircle2, XCircle, 
-  ArrowRight, Award, Target, Zap, AlertCircle 
+  ArrowRight, Award, Target, Zap, AlertCircle, Shield, Info
 } from 'lucide-react'
 import { OptimizationResult } from '@/lib/api'
 import { getScoreColor, getScoreBgColor, getScoreLabel } from '@/lib/utils'
@@ -78,6 +78,141 @@ export default function ResultsDashboard({ results, onStartOver }: ResultsDashbo
           highlighted
         />
       </div>
+
+      {/* Genuinity Score - NEW! */}
+      {results.genuinity && (
+        <div className={`rounded-2xl shadow-lg border p-6 ${
+          results.genuinity.risk_level === 'LOW' 
+            ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-200'
+            : results.genuinity.risk_level === 'MEDIUM'
+            ? 'bg-gradient-to-br from-yellow-50 to-orange-50 border-yellow-200'
+            : 'bg-gradient-to-br from-red-50 to-pink-50 border-red-200'
+        }`}>
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center space-x-3">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                results.genuinity.risk_level === 'LOW' ? 'bg-green-500' :
+                results.genuinity.risk_level === 'MEDIUM' ? 'bg-yellow-500' :
+                'bg-red-500'
+              }`}>
+                <Shield className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Resume Authenticity Score</h3>
+                <p className="text-sm text-gray-600">How genuine and believable your optimized resume appears</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className={`text-4xl font-bold ${
+                results.genuinity.score >= 85 ? 'text-green-600' :
+                results.genuinity.score >= 70 ? 'text-yellow-600' :
+                'text-red-600'
+              }`}>
+                {results.genuinity.score.toFixed(1)}
+              </div>
+              <div className="text-sm font-medium text-gray-600">/ 100</div>
+            </div>
+          </div>
+
+          {/* Risk Level Badge */}
+          <div className="flex items-center space-x-2 mb-4">
+            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+              results.genuinity.risk_level === 'LOW' ? 'bg-green-200 text-green-800' :
+              results.genuinity.risk_level === 'MEDIUM' ? 'bg-yellow-200 text-yellow-800' :
+              'bg-red-200 text-red-800'
+            }`}>
+              {results.genuinity.risk_level} RISK
+            </span>
+            {results.genuinity.score >= 85 && (
+              <span className="text-sm text-green-700 font-medium">✅ Safe to use</span>
+            )}
+            {results.genuinity.score >= 70 && results.genuinity.score < 85 && (
+              <span className="text-sm text-yellow-700 font-medium">⚠️ Review recommended</span>
+            )}
+            {results.genuinity.score < 70 && (
+              <span className="text-sm text-red-700 font-medium">⛔ Revisions needed</span>
+            )}
+          </div>
+
+          {/* Strengths */}
+          {results.genuinity.strengths && results.genuinity.strengths.length > 0 && (
+            <div className="mb-4">
+              <p className="text-sm font-semibold text-green-800 mb-2">✅ Strengths:</p>
+              <div className="space-y-2">
+                {results.genuinity.strengths.map((strength, i) => (
+                  <div key={i} className="flex items-start space-x-2 text-sm text-gray-700">
+                    <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span>{strength}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Issues */}
+          {results.genuinity.issues && results.genuinity.issues.length > 0 && (
+            <div className="mb-4">
+              <p className="text-sm font-semibold text-red-800 mb-2">🚨 Issues Detected:</p>
+              <div className="space-y-2">
+                {results.genuinity.issues.map((issue, i) => (
+                  <div key={i} className="flex items-start space-x-2 text-sm bg-white/50 p-3 rounded-lg">
+                    <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-red-900">[{issue.severity}] {issue.type}</p>
+                      <p className="text-gray-700">{issue.description}</p>
+                      <p className="text-xs text-gray-500 mt-1">Impact: {issue.impact} points</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Warnings */}
+          {results.genuinity.warnings && results.genuinity.warnings.length > 0 && (
+            <div className="mb-4">
+              <p className="text-sm font-semibold text-yellow-800 mb-2">⚠️ Warnings:</p>
+              <div className="space-y-2">
+                {results.genuinity.warnings.map((warning, i) => (
+                  <div key={i} className="flex items-start space-x-2 text-sm bg-white/50 p-3 rounded-lg">
+                    <Info className="w-4 h-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-yellow-900">{warning.type}</p>
+                      <p className="text-gray-700">{warning.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Recommendations */}
+          {results.genuinity.recommendations && results.genuinity.recommendations.length > 0 && (
+            <div>
+              <p className="text-sm font-semibold text-blue-800 mb-2">💡 Recommendations:</p>
+              <div className="space-y-2">
+                {results.genuinity.recommendations.map((rec, i) => (
+                  <div key={i} className="flex items-start space-x-2 text-sm text-gray-700">
+                    <div className="w-5 h-5 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
+                      {i + 1}
+                    </div>
+                    <span>{rec}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Info box */}
+          <div className="mt-4 p-3 bg-white/70 rounded-lg border border-gray-200">
+            <p className="text-xs text-gray-700">
+              <strong>What is this?</strong> The Authenticity Score analyzes your optimized resume to detect over-optimization, 
+              keyword stuffing, tech stack inconsistencies, and other factors that could make your resume look fake. 
+              A higher score means your resume maintains authenticity while being ATS-optimized.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Multi-ATS Scores */}
       <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">

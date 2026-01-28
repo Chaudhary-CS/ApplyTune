@@ -1,263 +1,285 @@
 """
-Context-Aware Validator - Know what's SAFE vs FAKE to change
-
-Based on research: Projects tech stacks are VERIFIABLE (GitHub) = Don't change!
-Experience descriptions are NOT verifiable = Safe to enhance
+Context Validator Service
+Validates whether keyword insertions make sense in context.
+Prevents fabrication and maintains resume authenticity.
 """
 
-from typing import List, Dict
+from typing import Dict, List
 import re
 
 
 class ContextValidator:
     """
-    Validates if adding a keyword is realistic or fabrication.
-    
-    Key Principle: Enhancement is OK, Fabrication is NOT.
-    
-    SAFE: "Built REST APIs" → "Built scalable REST APIs using Node.js"
-    FAKE: "Built REST APIs" → "Built ML models using PyTorch"
+    Validates keyword insertions to prevent:
+    - Fabricating project tech stacks
+    - Changing verifiable information
+    - Adding unrelated keywords
+    - Creating inconsistent claims
     """
     
-    # Technology families - adjacent techs are SAFE to add
-    TECH_FAMILIES = {
-        'python': {
-            'ecosystem': ['pandas', 'numpy', 'flask', 'django', 'fastapi', 'pytest', 'python'],
-            'adjacent_ml': ['pytorch', 'tensorflow', 'scikit-learn', 'machine learning', 'ml'],
-            'adjacent_data': ['data analysis', 'data science', 'jupyter']
-        },
-        'javascript': {
-            'ecosystem': ['react', 'node.js', 'typescript', 'vue', 'angular', 'next.js', 'express'],
-            'adjacent_frontend': ['html', 'css', 'ui/ux', 'responsive design'],
-            'adjacent_backend': ['rest api', 'graphql', 'websockets']
-        },
-        'java': {
-            'ecosystem': ['spring', 'spring boot', 'maven', 'gradle', 'junit'],
-            'adjacent_backend': ['rest api', 'microservices', 'jpa', 'hibernate']
-        },
-        'containerization': {
-            'ecosystem': ['docker', 'kubernetes', 'podman', 'container orchestration', 'helm'],
-            'adjacent_devops': ['ci/cd', 'jenkins', 'gitlab ci', 'github actions']
-        },
-        'cloud': {
-            'ecosystem': ['aws', 'azure', 'gcp', 'cloud computing', 'serverless'],
-            'adjacent_devops': ['terraform', 'cloudformation', 'infrastructure as code']
-        },
-        'databases': {
-            'sql': ['postgresql', 'mysql', 'sql', 'database design'],
-            'nosql': ['mongodb', 'redis', 'dynamodb', 'nosql'],
-            'orm': ['sequelize', 'mongoose', 'sqlalchemy']
-        },
-        'ml_ai': {
-            'frameworks': ['pytorch', 'tensorflow', 'scikit-learn', 'keras'],
-            'concepts': ['machine learning', 'deep learning', 'neural networks', 'ml'],
-            'tools': ['jupyter', 'pandas', 'numpy', 'matplotlib']
+    def __init__(self):
+        # Define tech stack categories and related technologies
+        self.tech_ecosystems = {
+            'python': {
+                'core': ['python'],
+                'related': ['django', 'flask', 'fastapi', 'pandas', 'numpy', 
+                           'pytorch', 'tensorflow', 'scikit-learn', 'jupyter']
+            },
+            'javascript': {
+                'core': ['javascript', 'typescript', 'node.js', 'node'],
+                'related': ['react', 'angular', 'vue', 'express', 'next.js', 
+                           'webpack', 'npm', 'yarn', 'jest']
+            },
+            'java': {
+                'core': ['java'],
+                'related': ['spring', 'spring boot', 'maven', 'gradle', 
+                           'hibernate', 'junit']
+            },
+            'devops': {
+                'core': ['docker', 'kubernetes', 'ci/cd', 'devops'],
+                'related': ['jenkins', 'gitlab ci', 'github actions', 'ansible', 
+                           'terraform', 'aws', 'azure', 'gcp']
+            },
+            'databases': {
+                'core': ['sql', 'database'],
+                'related': ['postgresql', 'mysql', 'mongodb', 'redis', 
+                           'elasticsearch', 'dynamodb']
+            },
+            'ml_ai': {
+                'core': ['machine learning', 'ml', 'ai', 'artificial intelligence'],
+                'related': ['pytorch', 'tensorflow', 'scikit-learn', 'keras', 
+                           'transformers', 'neural network', 'deep learning']
+            }
         }
-    }
+        
+        # Risky sections where changes are often verifiable
+        self.risky_sections = ['project', 'education', 'certification', 'publication']
+        
+        # Safe sections where additions are generally acceptable
+        self.safe_sections = ['experience', 'skill', 'summary', 'objective']
     
-    # Risk levels for different resume sections
-    SECTION_RISK = {
-        'projects': 'HIGH',           # GitHub is public - easily verified
-        'experience': 'LOW',          # Day-to-day tasks hard to verify  
-        'skills': 'VERY_LOW',         # Just listing capabilities
-        'certifications': 'EXTREME',  # Certificates are checked
-        'education': 'EXTREME'        # Transcripts exist
-    }
-    
-    def can_add_keyword(
-        self, 
-        keyword: str, 
-        section: str, 
-        existing_content: str
+    def validate_keyword_insertion(
+        self,
+        keyword: str,
+        context: str,
+        section_type: str,
+        existing_tech_stack: List[str] = None
     ) -> Dict:
         """
-        Determine if adding this keyword is SAFE or RISKY.
+        Validate if a keyword can be safely added to a specific context.
         
+        Args:
+            keyword: The keyword to add
+            context: The surrounding text where keyword would be added
+            section_type: Type of section (project, experience, skills, etc.)
+            existing_tech_stack: Technologies already mentioned in the context
+            
         Returns:
-            {
-                'allowed': bool,
-                'risk_level': 'SAFE' | 'QUESTIONABLE' | 'FABRICATION',
-                'reason': str,
-                'suggestion': str (alternative approach)
-            }
+            Dict with validation result
         """
         keyword_lower = keyword.lower()
-        content_lower = existing_content.lower()
+        context_lower = context.lower()
+        section_lower = section_type.lower()
         
-        # Check section risk level
-        section_risk = self._get_section_risk(section)
+        validation_result = {
+            'allowed': True,
+            'risk_level': 'SAFE',
+            'confidence': 1.0,
+            'reason': '',
+            'suggestion': ''
+        }
         
-        if section_risk == 'EXTREME':
+        # Check if it's a risky section
+        is_risky = any(risky in section_lower for risky in self.risky_sections)
+        
+        if is_risky:
+            # For projects, validate tech stack compatibility
+            if 'project' in section_lower:
+                validation_result = self._validate_project_tech(
+                    keyword, context, existing_tech_stack
+                )
+            # For education/certifications, be very conservative
+            elif any(section in section_lower for section in ['education', 'certification']):
+                validation_result['allowed'] = False
+                validation_result['risk_level'] = 'HIGH_RISK'
+                validation_result['confidence'] = 0.0
+                validation_result['reason'] = f"Cannot add keywords to {section_type} - this is verifiable information"
+                validation_result['suggestion'] = "Add this keyword to Skills or Experience sections instead"
+        
+        else:
+            # Safe sections - check for logical consistency
+            validation_result = self._validate_safe_section(keyword, context, section_type)
+        
+        return validation_result
+    
+    def _validate_project_tech(
+        self, 
+        keyword: str, 
+        context: str,
+        existing_tech_stack: List[str] = None
+    ) -> Dict:
+        """Validate if a tech keyword fits the project's existing stack."""
+        keyword_lower = keyword.lower()
+        context_lower = context.lower()
+        
+        # Identify the tech ecosystem of the project
+        project_ecosystem = None
+        
+        if existing_tech_stack:
+            for tech in existing_tech_stack:
+                ecosystem = self._identify_ecosystem(tech.lower())
+                if ecosystem:
+                    project_ecosystem = ecosystem
+                    break
+        
+        # If no existing stack identified, look in context
+        if not project_ecosystem:
+            for ecosystem_name, ecosystem_data in self.tech_ecosystems.items():
+                for tech in ecosystem_data['core'] + ecosystem_data['related']:
+                    if tech in context_lower:
+                        project_ecosystem = ecosystem_name
+                        break
+                if project_ecosystem:
+                    break
+        
+        # Now validate the keyword against the ecosystem
+        if project_ecosystem:
+            keyword_ecosystem = self._identify_ecosystem(keyword_lower)
+            
+            # Check if keyword belongs to the same or compatible ecosystem
+            if keyword_ecosystem == project_ecosystem:
+                return {
+                    'allowed': True,
+                    'risk_level': 'SAFE',
+                    'confidence': 0.9,
+                    'reason': f"Keyword '{keyword}' is compatible with project's {project_ecosystem} stack",
+                    'suggestion': 'Safe to add'
+                }
+            
+            # Check if it's a related technology
+            if keyword_lower in self.tech_ecosystems[project_ecosystem]['related']:
+                return {
+                    'allowed': True,
+                    'risk_level': 'LOW_RISK',
+                    'confidence': 0.7,
+                    'reason': f"Keyword '{keyword}' is related to {project_ecosystem} ecosystem",
+                    'suggestion': 'Can be added if it genuinely fits the project'
+                }
+            
+            # Incompatible tech stack
             return {
                 'allowed': False,
-                'risk_level': 'EXTREME_RISK',
-                'reason': f"{section} section is easily verified. DO NOT fabricate.",
-                'suggestion': f"Don't add {keyword} to {section} unless you actually have it."
+                'risk_level': 'FABRICATION',
+                'confidence': 0.1,
+                'reason': f"Keyword '{keyword}' ({keyword_ecosystem}) doesn't fit project's {project_ecosystem} stack",
+                'suggestion': 'Do NOT add - this would look fake. Projects are often verifiable on GitHub.'
             }
         
-        # For high-risk sections (Projects), check if keyword is adjacent technology
-        if section_risk == 'HIGH':
-            is_adjacent = self._is_adjacent_technology(keyword_lower, content_lower)
-            
-            if is_adjacent:
-                return {
-                    'allowed': True,
-                    'risk_level': 'SAFE',
-                    'reason': f"{keyword} is in the same tech ecosystem as existing project technologies.",
-                    'suggestion': f"Add {keyword} to project description if you actually used it."
-                }
-            else:
-                return {
-                    'allowed': False,
-                    'risk_level': 'FABRICATION',
-                    'reason': f"{keyword} is unrelated to project's tech stack. Adding would be fabrication.",
-                    'suggestion': f"DON'T add {keyword} to projects. Consider adding to Skills section instead if you have general familiarity."
-                }
+        # Unknown ecosystem - be cautious
+        return {
+            'allowed': True,
+            'risk_level': 'MEDIUM_RISK',
+            'confidence': 0.5,
+            'reason': "Unable to determine project's tech stack",
+            'suggestion': 'Add with caution - ensure it genuinely fits'
+        }
+    
+    def _validate_safe_section(
+        self, 
+        keyword: str, 
+        context: str,
+        section_type: str
+    ) -> Dict:
+        """Validate keyword insertion in safe sections like experience or skills."""
+        keyword_lower = keyword.lower()
+        context_lower = context.lower()
         
-        # For low-risk sections (Experience), more flexible
-        if section_risk == 'LOW':
-            is_same_domain = self._is_same_domain(keyword_lower, content_lower)
-            
-            if is_same_domain:
-                return {
-                    'allowed': True,
-                    'risk_level': 'SAFE',
-                    'reason': f"{keyword} fits the domain of this experience.",
-                    'suggestion': f"Enhance existing descriptions to naturally include {keyword}."
-                }
-            else:
-                return {
-                    'allowed': True,
-                    'risk_level': 'QUESTIONABLE',
-                    'reason': f"{keyword} is somewhat unrelated, but experience descriptions are flexible.",
-                    'suggestion': f"Only add {keyword} if you genuinely used it in this role, even peripherally."
-                }
-        
-        # For very-low-risk sections (Skills), very flexible
-        if section_risk == 'VERY_LOW':
+        # For skills section, almost anything goes
+        if 'skill' in section_type.lower():
             return {
                 'allowed': True,
                 'risk_level': 'SAFE',
-                'reason': "Skills section is just listing capabilities. Safe to add if you have any familiarity.",
-                'suggestion': f"Add {keyword} to Skills section."
+                'confidence': 0.95,
+                'reason': 'Skills section is a safe place for keyword additions',
+                'suggestion': 'Add naturally to relevant skill category'
             }
         
-        # Default: allow but flag as questionable
+        # For experience, check if it makes contextual sense
+        if 'experience' in section_type.lower():
+            # Check if keyword is already somewhat related to context
+            keyword_ecosystem = self._identify_ecosystem(keyword_lower)
+            
+            if keyword_ecosystem:
+                # Check if context has related technologies
+                for tech in self.tech_ecosystems[keyword_ecosystem]['related']:
+                    if tech in context_lower:
+                        return {
+                            'allowed': True,
+                            'risk_level': 'SAFE',
+                            'confidence': 0.85,
+                            'reason': f"Keyword fits the technical context of this experience",
+                            'suggestion': 'Integrate naturally into a bullet point'
+                        }
+            
+            # Generic approval for experience
+            return {
+                'allowed': True,
+                'risk_level': 'LOW_RISK',
+                'confidence': 0.7,
+                'reason': 'Experience descriptions can be enhanced with relevant keywords',
+                'suggestion': 'Add in a way that describes actual work, not fabricated claims'
+            }
+        
+        # Default for other safe sections
         return {
             'allowed': True,
-            'risk_level': 'QUESTIONABLE',
-            'reason': "Unable to determine context. Use caution.",
-            'suggestion': f"Only add {keyword} if truthful."
+            'risk_level': 'SAFE',
+            'confidence': 0.8,
+            'reason': f'{section_type} is generally safe for keyword additions',
+            'suggestion': 'Add naturally and contextually'
         }
     
-    def _get_section_risk(self, section: str) -> str:
-        """Map section name to risk level."""
-        section_lower = section.lower()
-        
-        if 'project' in section_lower:
-            return 'HIGH'
-        elif 'experience' in section_lower or 'work' in section_lower:
-            return 'LOW'
-        elif 'skill' in section_lower:
-            return 'VERY_LOW'
-        elif 'certification' in section_lower or 'education' in section_lower:
-            return 'EXTREME'
-        else:
-            return 'LOW'  # Default to conservative
+    def _identify_ecosystem(self, keyword: str) -> str:
+        """Identify which tech ecosystem a keyword belongs to."""
+        for ecosystem_name, ecosystem_data in self.tech_ecosystems.items():
+            if keyword in ecosystem_data['core'] or keyword in ecosystem_data['related']:
+                return ecosystem_name
+        return None
     
-    def _is_adjacent_technology(self, keyword: str, existing_content: str) -> bool:
+    def batch_validate(
+        self,
+        keywords: List[str],
+        resume_sections: Dict[str, str]
+    ) -> Dict[str, List[Dict]]:
         """
-        Check if keyword is in the same technology family as existing content.
+        Validate multiple keywords against resume sections.
         
-        Example:
-        - existing_content has "Python, Flask"
-        - keyword = "pandas" → TRUE (Python ecosystem)
-        - keyword = "Java" → FALSE (different language)
-        """
-        # Check each tech family
-        for family_name, family_data in self.TECH_FAMILIES.items():
-            # Check if existing content has any tech from this family
-            family_techs = []
-            for category, techs in family_data.items():
-                family_techs.extend(techs)
+        Args:
+            keywords: List of keywords to validate
+            resume_sections: Dict of section_name: section_content
             
-            has_family_tech = any(tech in existing_content for tech in family_techs)
-            
-            if has_family_tech:
-                # Check if keyword is also in this family
-                if keyword in [t.lower() for t in family_techs]:
-                    return True
-        
-        return False
-    
-    def _is_same_domain(self, keyword: str, existing_content: str) -> bool:
-        """
-        Check if keyword fits the general domain of the content.
-        
-        More relaxed than _is_adjacent_technology - used for Experience section.
-        """
-        # If keyword is mentioned anywhere in existing content, it's same domain
-        if keyword in existing_content:
-            return True
-        
-        # Check for semantic relatedness
-        # Backend keywords
-        backend_keywords = ['api', 'backend', 'server', 'database', 'microservices']
-        # Frontend keywords
-        frontend_keywords = ['frontend', 'ui', 'react', 'html', 'css', 'design']
-        # DevOps keywords
-        devops_keywords = ['devops', 'ci/cd', 'docker', 'kubernetes', 'deployment']
-        # Data/ML keywords
-        data_ml_keywords = ['data', 'machine learning', 'ml', 'analytics', 'ai']
-        
-        domains = [
-            ('backend', backend_keywords),
-            ('frontend', frontend_keywords),
-            ('devops', devops_keywords),
-            ('data_ml', data_ml_keywords)
-        ]
-        
-        for domain_name, domain_keywords in domains:
-            has_domain = any(kw in existing_content for kw in domain_keywords)
-            keyword_in_domain = any(kw in keyword or keyword in kw for kw in domain_keywords)
-            
-            if has_domain and keyword_in_domain:
-                return True
-        
-        return False
-    
-    def filter_keywords_by_context(
-        self, 
-        keywords: List[str], 
-        section: str, 
-        existing_content: str
-    ) -> Dict[str, List[str]]:
-        """
-        Filter keywords into SAFE, QUESTIONABLE, and RISKY buckets.
-        
         Returns:
-            {
-                'safe': [...],           # Green light - add these
-                'questionable': [...],   # Yellow - use caution  
-                'risky': [...]          # Red - don't add
-            }
+            Dict mapping section names to validation results
         """
-        safe = []
-        questionable = []
-        risky = []
+        results = {}
         
-        for keyword in keywords:
-            result = self.can_add_keyword(keyword, section, existing_content)
+        for section_name, section_content in resume_sections.items():
+            section_results = []
             
-            if result['risk_level'] in ['SAFE']:
-                safe.append(keyword)
-            elif result['risk_level'] in ['QUESTIONABLE']:
-                questionable.append(keyword)
-            else:
-                risky.append(keyword)
+            for keyword in keywords:
+                validation = self.validate_keyword_insertion(
+                    keyword=keyword,
+                    context=section_content,
+                    section_type=section_name
+                )
+                
+                if validation['allowed']:
+                    section_results.append({
+                        'keyword': keyword,
+                        'validation': validation
+                    })
+            
+            if section_results:
+                results[section_name] = section_results
         
-        return {
-            'safe': safe,
-            'questionable': questionable,
-            'risky': risky
-        }
+        return results

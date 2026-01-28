@@ -13,6 +13,8 @@ This is our secret weapon - no competitor has this!
 import re
 from typing import Dict, List, Tuple
 from .llama_optimizer import LlamaOptimizer
+from .keyword_prioritizer import KeywordPrioritizer
+from .multi_layer_validator import MultiLayerValidator
 
 
 class LaTeXOptimizer:
@@ -24,40 +26,70 @@ class LaTeXOptimizer:
     - Preserves ALL formatting
     - User compiles in Overleaf
     - Perfect structure guaranteed!
+    
+    NOW WITH 3-LAYER VALIDATION:
+    - Layer 1: Tech Ecosystem matching (FAST)
+    - Layer 2: LLM believability check (SMART)
+    - Layer 3: Semantic similarity (PRECISE)
     """
     
     def __init__(self):
         self.ai = LlamaOptimizer()
+        self.keyword_prioritizer = KeywordPrioritizer()
+        # Initialize 3-layer validator with LLM client
+        self.validator = MultiLayerValidator(llm_client=self.ai.client if hasattr(self.ai, 'client') else None)
+        self.changes_made = []  # Track changes for genuinity analysis
         
     def optimize_latex_resume(
         self, 
         latex_content: str, 
-        missing_keywords: List[str]
-    ) -> Tuple[str, List[str]]:
+        missing_keywords: List[str],
+        job_description: str = "",
+        job_title: str = ""
+    ) -> Tuple[str, List[str], List[Dict]]:
         """
-        AGGRESSIVE LaTeX optimization to guarantee 70+ ATS score!
+        SMART LaTeX optimization with genuinity validation!
         
         Strategy:
-        1. Add keywords to bullet points (primary)
-        2. Add keywords to Technical Skills section (backup)
-        3. Process 15-20 bullets (not just 10)
+        1. Prioritize keywords by importance
+        2. Validate context before insertion
+        3. Track all changes for genuinity scoring
+        4. Add keywords to bullet points (primary)
+        5. Add keywords to Technical Skills section (backup)
         
         Args:
             latex_content: Raw .tex file content
             missing_keywords: Keywords to add from job description
+            job_description: Full job description for prioritization
+            job_title: Job title for context
             
         Returns:
-            (optimized_latex, added_keywords)
+            (optimized_latex, added_keywords, changes_made)
         """
-        print(f"\n🎓 AGGRESSIVE LaTeX Optimization (Target: 70+ ATS Score)")
+        print(f"\n🎓 SMART LaTeX Optimization with Authenticity Checks")
         print(f"   Missing keywords: {len(missing_keywords)}")
-        print(f"   Goal: Add at least {min(len(missing_keywords), 15)} keywords")
+        
+        # STEP 0: Prioritize keywords by importance
+        if job_description:
+            scored_keywords = self.keyword_prioritizer.prioritize_keywords(
+                missing_keywords, job_description, job_title
+            )
+            # Sort by priority (HIGH > MEDIUM > LOW) and score
+            prioritized_keywords = [kw['keyword'] for kw in scored_keywords]
+            print(f"   📊 Prioritized keywords: {prioritized_keywords[:10]}")
+        else:
+            prioritized_keywords = missing_keywords
+        
+        print(f"   Goal: Add top {min(len(prioritized_keywords), 15)} keywords smartly")
+        
+        # Reset changes tracker
+        self.changes_made = []
         
         # Step 1: Find all \item commands
         items = self._extract_items(latex_content)
         print(f"   Found {len(items)} bullet points")
         
-        # Step 2: Enhance bullets with keywords (process MORE bullets!)
+        # Step 2: Enhance bullets with keywords (with validation!)
         optimized_latex = latex_content
         added_keywords = []
         
@@ -65,13 +97,35 @@ class LaTeXOptimizer:
         max_bullets = min(len(items), 20)
         
         for i, (original_item, start_pos, end_pos) in enumerate(items[:max_bullets]):
-            if not missing_keywords:
+            if not prioritized_keywords:
                 break
                 
-            # Pick a keyword to add
-            keyword = missing_keywords[0]
+            # Pick a keyword to add (from prioritized list)
+            keyword = prioritized_keywords[0]
             
             print(f"   🎯 Trying to add '{keyword}' to bullet {i+1}...")
+            
+            # VALIDATE: Run through 3-layer validation system!
+            clean_bullet = self._clean_latex_commands(original_item)
+            validation = self.validator.validate_keyword(
+                keyword=keyword,
+                context=clean_bullet,
+                job_context=job_description[:500] if job_description else None,  # First 500 chars for context
+                strict_mode=False  # Use majority vote (2/3 layers must approve)
+            )
+            
+            if not validation['valid']:
+                print(f"   ❌ BLOCKED by {validation['decision_path']}: {validation['reason']}")
+                # Log detailed layer results for debugging
+                if validation['layer1_result']:
+                    print(f"      Layer 1 (Ecosystem): {'✓' if validation['layer1_result']['valid'] else '✗'} {validation['layer1_result']['reason'][:80]}")
+                if validation['layer2_result']:
+                    print(f"      Layer 2 (LLM): {'✓' if validation['layer2_result']['valid'] else '✗'} {validation['layer2_result']['reason'][:80]}")
+                if validation['layer3_result']:
+                    print(f"      Layer 3 (Semantic): {'✓' if validation['layer3_result']['valid'] else '✗'} Score: {validation['layer3_result']['similarity_score']}")
+                
+                prioritized_keywords.pop(0)  # Remove this keyword
+                continue
             
             # Ask AI to enhance this specific bullet
             enhanced_item = self._enhance_bullet_latex_style(
@@ -89,29 +143,59 @@ class LaTeXOptimizer:
                 )
                 
                 added_keywords.append(keyword)
-                missing_keywords.pop(0)
+                prioritized_keywords.pop(0)
                 
-                print(f"   ✅ Added '{keyword}' to bullet {i+1}")
+                # Track change for genuinity analysis
+                self.changes_made.append({
+                    'keyword': keyword,
+                    'section': 'experience',
+                    'before': original_item,
+                    'after': enhanced_item,
+                    'validation': validation,
+                    'confidence': validation['overall_confidence'],
+                    'layers_approved': validation['decision_path']
+                })
+                
+                print(f"   ✅ Added '{keyword}' to bullet {i+1} ({validation['decision_path']}, Confidence: {validation['overall_confidence']})")
             else:
                 print(f"   ⚠️ Failed to add '{keyword}' to bullet {i+1}, trying next bullet...")
         
-        # Step 3: Add remaining keywords to Technical Skills section
-        if missing_keywords and len(added_keywords) < 15:
-            print(f"\n   📝 Adding remaining keywords to Technical Skills section...")
+        # Step 3: Add remaining keywords to Technical Skills section (safe zone!)
+        if prioritized_keywords and len(added_keywords) < 15:
+            print(f"\n   📝 Adding remaining keywords to Technical Skills section (SAFE)...")
             optimized_latex, skills_added = self._add_to_skills_section(
                 optimized_latex, 
-                missing_keywords[:10]  # Add up to 10 more
+                prioritized_keywords[:10]  # Add up to 10 more
             )
+            
+            # Track skills additions
+            for kw in skills_added:
+                self.changes_made.append({
+                    'keyword': kw,
+                    'section': 'skills',
+                    'before': '',
+                    'after': kw,
+                    'validation': {
+                        'valid': True,
+                        'overall_confidence': 'HIGH',
+                        'reason': 'Skills section is safe for keyword additions',
+                        'decision_path': 'Skills (bypass validation)'
+                    },
+                    'confidence': 'HIGH',
+                    'layers_approved': 'Skills (bypass validation)'
+                })
+            
             added_keywords.extend(skills_added)
             print(f"   ✅ Added {len(skills_added)} keywords to Skills section")
         
         improvement_pct = (len(added_keywords) / max(len(missing_keywords) + len(added_keywords), 1)) * 100
         
         print(f"\n✅ LaTeX optimized! Added {len(added_keywords)} keywords ({improvement_pct:.0f}% coverage)")
-        print(f"   Expected ATS score: 65-80 (from previous ~38)")
+        print(f"   Authenticity preserved with {len(self.changes_made)} validated changes")
+        print(f"   Expected ATS score: 65-80")
         print(f"   User can now compile in Overleaf!")
         
-        return optimized_latex, added_keywords
+        return optimized_latex, added_keywords, self.changes_made
     
     def _extract_items(self, latex_content: str) -> List[Tuple[str, int, int]]:
         """
@@ -517,6 +601,36 @@ Enhanced:"""
         text = re.sub(r'\s+', ' ', text)
         
         return text.strip()
+    
+    def _extract_tech_from_text(self, text: str) -> List[str]:
+        """
+        Extract technology keywords from text for context validation.
+        Returns list of tech terms found in the text.
+        """
+        # Common tech keywords to look for
+        tech_terms = [
+            'python', 'java', 'javascript', 'typescript', 'c++', 'golang', 'rust', 'ruby',
+            'react', 'angular', 'vue', 'node', 'node.js', 'django', 'flask', 'fastapi',
+            'spring', 'spring boot', 'express',
+            'docker', 'kubernetes', 'k8s', 'ansible', 'terraform',
+            'aws', 'azure', 'gcp', 'cloud',
+            'postgresql', 'mysql', 'mongodb', 'redis', 'sql', 'nosql',
+            'pytorch', 'tensorflow', 'machine learning', 'ml', 'ai', 'deep learning',
+            'api', 'rest', 'graphql', 'microservices', 'websocket',
+            'git', 'ci/cd', 'jenkins', 'github actions', 'gitlab ci',
+            'linux', 'bash', 'shell',
+            'html', 'css', 'sass', 'tailwind',
+            'jest', 'pytest', 'junit', 'testing'
+        ]
+        
+        text_lower = text.lower()
+        found_tech = []
+        
+        for tech in tech_terms:
+            if tech in text_lower:
+                found_tech.append(tech)
+        
+        return found_tech
 
 
 # Convenience function
