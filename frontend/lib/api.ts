@@ -38,6 +38,30 @@ export interface GenuinityAnalysis {
   recommendations: string[]
 }
 
+// NEW: Change tracking for real-time preview
+export interface ResumeChange {
+  id: string
+  type: 'keyword_added' | 'skill_added' | 'skill_removed' | 'content_enhanced' | 'bullet_modified'
+  status: 'accepted' | 'rejected' | 'pending'
+  original_text: string
+  modified_text: string
+  section: string
+  bullet_index?: number
+  reason: string
+  keywords_added: string[]
+  validation_layers_passed: string[]
+  validation_warnings: string[]
+  ats_impact: number
+}
+
+export interface ChangePreview {
+  total_changes: number
+  accepted: number
+  rejected: number
+  total_ats_impact: number
+  changes: ResumeChange[]
+}
+
 export interface OptimizationResult {
   original_score: number
   optimized_score: number
@@ -51,7 +75,8 @@ export interface OptimizationResult {
   score_breakdown: Record<string, any>
   improvement_percentage: number
   optimized_resume: any
-  genuinity?: GenuinityAnalysis // New field
+  genuinity?: GenuinityAnalysis // Genuinity scoring
+  change_preview?: ChangePreview // NEW: Real-time change preview!
 }
 
 /**
@@ -139,7 +164,8 @@ export async function optimizeResume(
         latex_content: data.optimized_resume?.content || null,
         ...data.optimized_resume
       },
-      genuinity: data.genuinity // NEW: Genuinity analysis
+      genuinity: data.genuinity, // Genuinity analysis
+      change_preview: data.change_preview // NEW: Real-time change preview!
     }
   } catch (error: any) {
     // Better error handling

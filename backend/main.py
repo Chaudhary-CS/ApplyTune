@@ -131,6 +131,8 @@ async def optimize_resume(
         # ========== STEP 4: Optimize Resume ==========
         print(f"\n🔧 Optimizing resume...")
         
+        change_tracker = None  # Initialize for later use
+        
         if is_latex:
             # LaTeX optimization with validation
             keyword_matches, missing_keywords = ats_scorer.get_keyword_matches(
@@ -140,7 +142,7 @@ async def optimize_resume(
             print(f"   Missing {len(missing_keywords)} keywords from job description")
             
             # Optimize LaTeX with validation
-            optimized_latex, added_keywords, changes_made = latex_optimizer.optimize_latex_resume(
+            optimized_latex, added_keywords, changes_made, change_tracker = latex_optimizer.optimize_latex_resume(
                 latex_content=latex_content,
                 missing_keywords=missing_keywords[:20],  # Top 20 keywords
                 job_description=job_description,
@@ -152,6 +154,7 @@ async def optimize_resume(
             optimized_content = optimized_latex
             
             print(f"✓ LaTeX optimized: {len(added_keywords)} keywords added")
+            print(f"✓ Change tracker: {change_tracker.to_dict()['total_changes']} total changes")
         
         else:
             # Traditional optimization (PDF/DOCX)
@@ -237,7 +240,8 @@ async def optimize_resume(
                 "content": optimized_content if is_latex else None,
                 "format": "latex" if is_latex else "json",
                 "data": optimized_resume if not is_latex else None
-            }
+            },
+            "change_preview": change_tracker.to_dict() if is_latex else None  # NEW: Real-time preview data!
         }
         
         print(f"\n{'='*60}")

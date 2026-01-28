@@ -15,6 +15,7 @@ from typing import Dict, List, Tuple
 from .llama_optimizer import LlamaOptimizer
 from .keyword_prioritizer import KeywordPrioritizer
 from .multi_layer_validator import MultiLayerValidator
+from .change_tracker import ChangeTracker
 
 
 class LaTeXOptimizer:
@@ -39,6 +40,7 @@ class LaTeXOptimizer:
         # Initialize 3-layer validator with LLM client
         self.validator = MultiLayerValidator(llm_client=self.ai.client if hasattr(self.ai, 'client') else None)
         self.changes_made = []  # Track changes for genuinity analysis
+        self.change_tracker = ChangeTracker()  # NEW: Track all changes for real-time preview
         
     def optimize_latex_resume(
         self, 
@@ -46,7 +48,7 @@ class LaTeXOptimizer:
         missing_keywords: List[str],
         job_description: str = "",
         job_title: str = ""
-    ) -> Tuple[str, List[str], List[Dict]]:
+    ) -> Tuple[str, List[str], List[Dict], 'ChangeTracker']:
         """
         SMART LaTeX optimization with genuinity validation!
         
@@ -64,7 +66,7 @@ class LaTeXOptimizer:
             job_title: Job title for context
             
         Returns:
-            (optimized_latex, added_keywords, changes_made)
+            (optimized_latex, added_keywords, changes_made, change_tracker)
         """
         print(f"\n🎓 SMART LaTeX Optimization with Authenticity Checks")
         print(f"   Missing keywords: {len(missing_keywords)}")
@@ -159,7 +161,7 @@ class LaTeXOptimizer:
                     optimized_latex = optimized_latex.replace(original_item, enhanced_item, 1)
                     added_keywords.append(keyword)
                     
-                    # Track change
+                    # Track change (OLD FORMAT - for genuinity analysis)
                     self.changes_made.append({
                         'keyword': keyword,
                         'section': 'experience',
@@ -171,6 +173,19 @@ class LaTeXOptimizer:
                         'placement_score': best_validation_score
                     })
                     
+                    # Track change (NEW FORMAT - for real-time preview!)
+                    section_name = f"Experience Bullet {best_bullet_idx + 1}"
+                    ats_impact = 100.0 / len(missing_keywords)  # Rough estimate
+                    self.change_tracker.track_bullet_modification(
+                        original=original_item,
+                        modified=enhanced_item,
+                        section=section_name,
+                        bullet_index=best_bullet_idx,
+                        keywords_added=[keyword],
+                        validation_result=best_validation,
+                        ats_impact=ats_impact
+                    )
+                    
                     print(f"   ✅ '{keyword}' successfully added")
                 else:
                     print(f"   ⚠️ AI failed to insert '{keyword}', adding to fallback list")
@@ -181,39 +196,6 @@ class LaTeXOptimizer:
                 if best_validation:
                     print(f"      Reason: {best_validation['reason'][:100]}")
                 rejected_keywords.append(keyword)
-            
-            # Ask AI to enhance this specific bullet
-            enhanced_item = self._enhance_bullet_latex_style(
-                original_item, 
-                keyword
-            )
-            
-            # Verify it was added
-            if keyword.lower() in enhanced_item.lower() and enhanced_item != original_item:
-                # Replace in LaTeX
-                optimized_latex = optimized_latex.replace(
-                    original_item,
-                    enhanced_item,
-                    1  # Only first occurrence
-                )
-                
-                added_keywords.append(keyword)
-                prioritized_keywords.pop(0)
-                
-                # Track change for genuinity analysis
-                self.changes_made.append({
-                    'keyword': keyword,
-                    'section': 'experience',
-                    'before': original_item,
-                    'after': enhanced_item,
-                    'validation': validation,
-                    'confidence': validation['overall_confidence'],
-                    'layers_approved': validation['decision_path']
-                })
-                
-                print(f"   ✅ Added '{keyword}' to bullet {i+1} ({validation['decision_path']}, Confidence: {validation['overall_confidence']})")
-            else:
-                print(f"   ⚠️ Failed to add '{keyword}' to bullet {i+1}, trying next bullet...")
         
         # Step 3: FALLBACK - Add rejected keywords to Technical Skills section (ALWAYS SAFE!)
         print(f"\n   📝 FALLBACK STRATEGY: Adding {len(rejected_keywords)} rejected keywords to Skills section...")
@@ -225,6 +207,7 @@ class LaTeXOptimizer:
             
             # Track skills additions
             for kw in skills_added:
+                # OLD FORMAT
                 self.changes_made.append({
                     'keyword': kw,
                     'section': 'skills',
@@ -239,6 +222,15 @@ class LaTeXOptimizer:
                     'confidence': 'HIGH',
                     'layers_approved': 'Skills (bypass validation)'
                 })
+                
+                # NEW FORMAT - for real-time preview
+                ats_impact = 100.0 / len(missing_keywords)  # Rough estimate per keyword
+                self.change_tracker.track_skill_addition(
+                    skill=kw,
+                    section="Technical Skills",
+                    reason=f"Added missing keyword from job description",
+                    ats_impact=ats_impact
+                )
             
             added_keywords.extend(skills_added)
             print(f"   ✅ Added {len(skills_added)} keywords to Skills section")
@@ -252,8 +244,9 @@ class LaTeXOptimizer:
         print(f"   🛡️ Fallback strategy: {len(skills_added)} keywords safely added to Skills")
         print(f"   🎯 Expected ATS score: 70-85 (maximized while maintaining genuinity)")
         print(f"   ✅ Ready to compile in Overleaf!")
+        print(f"   📝 Change tracker: {self.change_tracker.get_total_ats_impact():.1f}% estimated ATS improvement")
         
-        return optimized_latex, added_keywords, self.changes_made
+        return optimized_latex, added_keywords, self.changes_made, self.change_tracker
     
     def _extract_items(self, latex_content: str) -> List[Tuple[str, int, int]]:
         """

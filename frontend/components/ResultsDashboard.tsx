@@ -10,6 +10,7 @@ import { getScoreColor, getScoreBgColor, getScoreLabel } from '@/lib/utils'
 import ScoreCard from './ScoreCard'
 import KeywordList from './KeywordList'
 import ScoreBreakdown from './ScoreBreakdown'
+import DiffViewer from './DiffViewer'
 
 interface ResultsDashboardProps {
   results: OptimizationResult
@@ -17,7 +18,9 @@ interface ResultsDashboardProps {
 }
 
 export default function ResultsDashboard({ results, onStartOver }: ResultsDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'keywords' | 'breakdown'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'keywords' | 'breakdown' | 'changes'>(
+    results.change_preview ? 'changes' : 'overview'  // Start with changes preview if available!
+  )
 
   const improvement = results.improvement_percentage
 
@@ -259,6 +262,8 @@ export default function ResultsDashboard({ results, onStartOver }: ResultsDashbo
         {/* Tab Headers */}
         <div className="flex border-b border-gray-200 bg-gray-50">
           {[
+            // NEW: Changes tab first if available!
+            ...(results.change_preview ? [{ id: 'changes', label: '🎯 Change Preview', icon: <Zap className="w-4 h-4" /> }] : []),
             { id: 'overview', label: 'Overview', icon: <AlertCircle className="w-4 h-4" /> },
             { id: 'keywords', label: 'Keywords', icon: <CheckCircle2 className="w-4 h-4" /> },
             { id: 'breakdown', label: 'Score Breakdown', icon: <TrendingUp className="w-4 h-4" /> },
@@ -283,6 +288,10 @@ export default function ResultsDashboard({ results, onStartOver }: ResultsDashbo
 
         {/* Tab Content */}
         <div className="p-6">
+          {activeTab === 'changes' && results.change_preview && (
+            <DiffViewer changePreview={results.change_preview} />
+          )}
+          
           {activeTab === 'overview' && (
             <div className="space-y-4">
               <h3 className="font-semibold text-gray-900 text-lg mb-4">Optimization Summary</h3>
